@@ -1,14 +1,17 @@
 module Data.Time.LocalTime.TimeZone.Unix
 (
-    -- * Time Zones
+    -- * Time Zone
     getCurrentTimeZoneSeries,
-    ZoneName,
     getTimeZoneSeriesForZone,
-    -- * Other information
+    -- * Country Information
     CountryCode,
     getCountryCodes,
+    -- * Zone Information
+    ZoneName,
     ZoneDescription(..),
     getZoneDescriptions,
+    -- * OlsonData
+    getCurrentOlsonData,
     getOlsonDataForZone,
 ) where
 {
@@ -77,7 +80,7 @@ module Data.Time.LocalTime.TimeZone.Unix
 
     type CountryCode = String;
 
-    -- | Get the country codes and names found in @\/usr\/share\/zoneinfo\/iso3166.tab@
+    -- | Get the country codes and names found in @iso3166.tab@.
     ;
     getCountryCodes :: IO [(CountryCode,String)];
     getCountryCodes = let
@@ -97,7 +100,7 @@ module Data.Time.LocalTime.TimeZone.Unix
         zoneComment :: String
     };
 
-    -- | Get the zone descriptions found in @\/usr\/shar\e/zoneinfo\/zone1970.tab@ (or @zone.tab@).
+    -- | Get the zone descriptions found in @zone1970.tab@ (or @zone.tab@).
     ;
     getZoneDescriptions :: IO [ZoneDescription];
     getZoneDescriptions = let
@@ -155,6 +158,15 @@ module Data.Time.LocalTime.TimeZone.Unix
         Nothing -> return defaultTimeZoneSeries; -- TODO: interpret old-style TZ format
     };
 
+    -- | Get the current 'TimeZoneSeries' (as specifed by @TZ@ env-var or else the system default).
+    ;
+    getCurrentTimeZoneSeries :: IO TimeZoneSeries;
+    getCurrentTimeZoneSeries = do
+    {
+        mtzvar <- lookupEnv "TZ";
+        getTimeZoneSeriesForZone mtzvar;
+    };
+
     -- | Read the 'OlsonData' file for this 'ZoneName' (or for the system default). The usual file exceptions may be thrown.
     ;
     getOlsonDataForZone :: Maybe ZoneName -> IO OlsonData;
@@ -164,12 +176,12 @@ module Data.Time.LocalTime.TimeZone.Unix
         Nothing -> fail $ "Not a valid ZoneInfo name: " ++ show mname;
     };
 
-    -- | Get the current 'TimeZoneSeries' (as specifed by @TZ@ env-var or else the system default).
+    -- | Get the current 'OlsonData' (as specifed by @TZ@ env-var or else the system default).
     ;
-    getCurrentTimeZoneSeries :: IO TimeZoneSeries;
-    getCurrentTimeZoneSeries = do
+    getCurrentOlsonData :: IO OlsonData;
+    getCurrentOlsonData = do
     {
         mtzvar <- lookupEnv "TZ";
-        getTimeZoneSeriesForZone mtzvar;
+        getOlsonDataForZone mtzvar;
     };
 }
