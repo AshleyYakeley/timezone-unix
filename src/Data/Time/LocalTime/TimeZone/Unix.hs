@@ -3,7 +3,6 @@ module Data.Time.LocalTime.TimeZone.Unix
     -- * Time Zones
     getCurrentTimeZoneSeries,
     ZoneName,
-    getCurrentZoneName,
     getTimeZoneSeriesForZone,
     -- * Other information
     CountryCode,
@@ -19,7 +18,6 @@ module Data.Time.LocalTime.TimeZone.Unix
     import System.Environment;
     import System.Directory;
     import System.FilePath.Posix;
-    import System.Posix.Files;
     import Data.Time.LocalTime;
     import Data.Time.LocalTime.TimeZone.Series;
     import Data.Time.LocalTime.TimeZone.Olson;
@@ -121,8 +119,9 @@ module Data.Time.LocalTime.TimeZone.Unix
         toZoneDescription _ = Nothing;
     } in readZoneInfoFile toZoneDescription ["zone1970.tab","zone.tab"];
 
-    validZoneNamePath :: ZoneName -> Maybe FilePath;
-    validZoneNamePath name = let
+    validZoneNamePath :: Maybe ZoneName -> Maybe FilePath;
+    validZoneNamePath Nothing = Just "/etc/localtime";
+    validZoneNamePath (Just name) = let
     {
         components = splitDirectories name;
 
@@ -143,10 +142,10 @@ module Data.Time.LocalTime.TimeZone.Unix
     defaultTimeZoneSeries :: TimeZoneSeries;
     defaultTimeZoneSeries = TimeZoneSeries utc [];
 
-    -- | Get the 'TimeZoneSeries' for this 'ZoneName', defaulting to UTC if the name is not found.
+    -- | Get the 'TimeZoneSeries' for this 'ZoneName' (or for the system default), defaulting to UTC if the name is not found.
     ;
-    getTimeZoneSeriesForZone :: ZoneName -> IO TimeZoneSeries;
-    getTimeZoneSeriesForZone name = case validZoneNamePath name of
+    getTimeZoneSeriesForZone :: Maybe ZoneName -> IO TimeZoneSeries;
+    getTimeZoneSeriesForZone mname = case validZoneNamePath mname of
     {
         Just path -> do
         {
@@ -156,39 +155,13 @@ module Data.Time.LocalTime.TimeZone.Unix
         Nothing -> return defaultTimeZoneSeries; -- TODO: interpret old-style TZ format
     };
 
-    -- | Read the 'OlsonData' file for this 'ZoneName'. The usual file exceptions may be thrown.
+    -- | Read the 'OlsonData' file for this 'ZoneName' (or for the system default). The usual file exceptions may be thrown.
     ;
-    getOlsonDataForZone :: ZoneName -> IO OlsonData;
-    getOlsonDataForZone name = case validZoneNamePath name of
+    getOlsonDataForZone :: Maybe ZoneName -> IO OlsonData;
+    getOlsonDataForZone mname = case validZoneNamePath mname of
     {
         Just path -> getOlsonFromFile path;
-        Nothing -> fail $ "Not a valid ZoneInfo name: " ++ name;
-    };
-
-    getSystemDefaultZoneName :: IO ZoneName;
-    getSystemDefaultZoneName = do
-    {
-        -- https://www.freedesktop.org/software/systemd/man/localtime.html
-        lpath <- readSymbolicLink "/etc/localtime";
-        let
-        {
-            abspath = "/etc" </> lpath;
-            name = makeRelative "/usr/share/zoneinfo" abspath;
-        };
-        return name;
-    };
-
-    -- | Get the current 'ZoneName' (in @TZ@ env-var or else the system default specified by the @\/etc\/localtime@ symlink)
-    ;
-    getCurrentZoneName :: IO ZoneName;
-    getCurrentZoneName = do
-    {
-        mtzvar <- lookupEnv "TZ";
-        case mtzvar of
-        {
-            Just tzvar -> return tzvar;
-            Nothing -> getSystemDefaultZoneName;
-        };
+        Nothing -> fail $ "Not a valid ZoneInfo name: " ++ show mname;
     };
 
     -- | Get the current 'TimeZoneSeries' (as specifed by @TZ@ env-var or else the system default).
@@ -196,7 +169,7 @@ module Data.Time.LocalTime.TimeZone.Unix
     getCurrentTimeZoneSeries :: IO TimeZoneSeries;
     getCurrentTimeZoneSeries = do
     {
-        name <- getCurrentZoneName;
-        getTimeZoneSeriesForZone name;
+        mtzvar <- lookupEnv "TZ";
+        getTimeZoneSeriesForZone mtzvar;
     };
 }

@@ -1,5 +1,6 @@
 module Main(main) where
 {
+    import Data.Maybe;
     import System.Environment;
     import Test.Tasty;
     import Test.Tasty.HUnit;
@@ -21,26 +22,18 @@ module Main(main) where
         assertBool "at least 300 zones" $ length zones >= 300;
     };
 
-    testGetTimeZoneSeries :: ZoneName -> TestTree;
-    testGetTimeZoneSeries name = testCase "getTimeZoneSeriesForZone" $ getTimeZoneSeriesForZone name >> return ();
+    testGetTimeZoneSeries :: Maybe ZoneName -> TestTree;
+    testGetTimeZoneSeries mname = testCase "getTimeZoneSeriesForZone" $ getTimeZoneSeriesForZone mname >> return ();
 
-    testGetOlsonData :: ZoneName -> TestTree;
-    testGetOlsonData name = testCase "getOlsonDataForZone" $ getOlsonDataForZone name >> return ();
+    testGetOlsonData :: Maybe ZoneName -> TestTree;
+    testGetOlsonData mname = testCase "getOlsonDataForZone" $ getOlsonDataForZone mname >> return ();
 
     testLoadZones :: [ZoneName] -> TestTree;
-    testLoadZones names = testGroup "load" $ fmap (\name -> testGroup name
+    testLoadZones names = testGroup "load" $ fmap (\mname -> testGroup (fromMaybe "default" mname)
         [
-            testGetTimeZoneSeries name,
-            testGetOlsonData name
-        ]) names;
-
-    testGetCurrentZoneName :: [ZoneName] -> TestTree;
-    testGetCurrentZoneName names = testCase "getCurrentZoneName" $ do
-    {
-        unsetEnv "TZ";
-        name <- getCurrentZoneName;
-        assertBool "default name found" $ elem name names;
-    };
+            testGetTimeZoneSeries mname,
+            testGetOlsonData mname
+        ]) (Nothing : (fmap Just names));
 
     testUnknownZoneName :: TestTree;
     testUnknownZoneName = testCase "unknown ZoneName" $ do
@@ -63,7 +56,6 @@ module Main(main) where
             testCountryCodes,
             testZoneDescriptions zones,
             testLoadZones names,
-            testGetCurrentZoneName names,
             testUnknownZoneName
         ];
     };
