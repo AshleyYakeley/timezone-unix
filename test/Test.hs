@@ -4,6 +4,8 @@ module Main(main) where
     import System.Environment;
     import Test.Tasty;
     import Test.Tasty.HUnit;
+    import Test.Tasty.Golden;
+    import Data.Time.Clock.POSIX;
     import Data.Time.LocalTime;
     import Data.Time.LocalTime.TimeZone.Series;
     import Data.Time.LocalTime.TimeZone.Unix;
@@ -43,6 +45,22 @@ module Main(main) where
         assertEqual "default ZoneName" (TimeZoneSeries utc []) tzs;
     };
 
+    testGetLeapSecondList :: TestTree;
+    testGetLeapSecondList = testGroup "getLeapSecondList" [
+        testCase "values" $ do
+        {
+            lsl <- getLeapSecondList;
+            assertBool "expiration is later than version" $ lslExpiration lsl > lslVersion lsl;
+        },
+        goldenVsFile "leap-seconds" "test/leap-seconds.ref" "test/leap-seconds.out" $ do
+        {
+            lsl <- getLeapSecondList;
+            -- just look at the first 26, since the list will grow.
+            writeBinaryFile "test/leap-seconds.out" $
+                concat $ fmap (\(t,n) -> show (posixSecondsToUTCTime t) ++ " " ++ show n ++ "\n") $ take 26 $ lslTransitions lsl;
+        }
+        ];
+
     main :: IO ();
     main = do
     {
@@ -56,7 +74,8 @@ module Main(main) where
             testCountryCodes,
             testZoneDescriptions zones,
             testLoadZones names,
-            testUnknownZoneName
+            testUnknownZoneName,
+            testGetLeapSecondList
         ];
     };
 }

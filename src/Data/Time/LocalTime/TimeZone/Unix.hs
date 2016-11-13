@@ -13,14 +13,19 @@ module Data.Time.LocalTime.TimeZone.Unix
     -- * OlsonData
     getCurrentOlsonData,
     getOlsonDataForZone,
+    -- * Leap Seconds
+    LeapSecondList(..),
+    getLeapSecondList,
 ) where
 {
     import Data.Char;
     import Data.Maybe;
     import Data.List;
+    import Text.Read;
     import System.Environment;
     import System.Directory;
     import System.FilePath.Posix;
+    import Data.Time.Clock.POSIX;
     import Data.Time.LocalTime;
     import Data.Time.LocalTime.TimeZone.Series;
     import Data.Time.LocalTime.TimeZone.Olson;
@@ -184,4 +189,71 @@ module Data.Time.LocalTime.TimeZone.Unix
         mtzvar <- lookupEnv "TZ";
         getOlsonDataForZone mtzvar;
     };
+
+    data LeapSecondList = MkLeapSecondList
+    {
+        lslVersion :: POSIXTime,
+        lslExpiration :: POSIXTime,
+        lslTransitions :: [(POSIXTime,Int)]
+    };
+
+    ntpEpoch :: POSIXTime;
+    ntpEpoch = -25567 * 24 * 60 * 60;
+
+    ntpDateStringToPOSIX :: String -> Maybe POSIXTime;
+    ntpDateStringToPOSIX s = do
+    {
+        n <- readMaybe s;
+        return $ ntpEpoch + fromInteger n;
+    };
+
+    -- | Get the leap-second list found in @leap-seconds.list@.
+    ;
+    getLeapSecondList :: IO LeapSecondList;
+    getLeapSecondList = do
+    {
+        let
+        {
+            filepath = zoneFilePath "leap-seconds.list";
+        };
+        text <- readFile filepath;
+        let
+        {
+            readLine ('#':'$':s) | Just version <- ntpDateStringToPOSIX s = return (Just version,Nothing,Nothing);
+            readLine ('#':'@':s) | Just expiration <- ntpDateStringToPOSIX s = return (Nothing,Just expiration,Nothing);
+            readLine ('#':_) = return (Nothing,Nothing,Nothing);
+            readLine "" = return (Nothing,Nothing,Nothing);
+            readLine s = case separate '\t' s of
+            {
+                (tstr:ostr:_) | Just t <- ntpDateStringToPOSIX tstr, Just offset <- readMaybe ostr -> return $ (Nothing,Nothing,Just (t,offset));
+                _ -> fail $ "unexpected line in "++filepath++": " ++ s;
+            };
+        };
+        mstrs <- traverse readLine $ lines text;
+        version <- case catMaybes $ fmap (\(x,_,_) -> x) mstrs of
+        {
+            [x] -> return x;
+            [] -> fail $ "missing #$ line in " ++ filepath;
+            _ -> fail $ "duplicate #$ lines in " ++ filepath;
+        };
+        expiration <- case catMaybes $ fmap (\(_,x,_) -> x) mstrs of
+        {
+            [x] -> return x;
+            [] -> fail $ "missing #$ line in " ++ filepath;
+            _ -> fail $ "duplicate #$ lines in " ++ filepath;
+        };
+        let
+        {
+            transitions = catMaybes $ fmap (\(_,_,x) -> x) mstrs;
+        };
+        return $ MkLeapSecondList version expiration transitions;
+    };
+
+{-
+    utcDayLength :: LeapSecondList -> Day -> Maybe DiffTime;
+
+    utcToTAITime :: LeapSecondList -> UTCTime -> Maybe AbsoluteTime;
+
+    taiToUTCTime :: LeapSecondList -> AbsoluteTime -> Maybe UTCTime;
+-}
 }
