@@ -89,6 +89,7 @@ module Data.Time.LocalTime.TimeZone.Unix
     type CountryCode = String;
 
     -- | Get the country codes and names found in @iso3166.tab@.
+    -- Note that earlier versions of zoneinfo don't include this file, in which case this will throw exception matching 'isDoesNotExistError'.
     ;
     getCountryCodes :: IO [(CountryCode,String)];
     getCountryCodes = let
@@ -213,6 +214,7 @@ module Data.Time.LocalTime.TimeZone.Unix
     };
 
     -- | Get the leap-second list found in @leap-seconds.list@.
+    -- Note that earlier versions of zoneinfo don't include this file, in which case this will throw exception matching 'isDoesNotExistError'.
     ;
     getLeapSecondList :: IO LeapSecondList;
     getLeapSecondList = do
