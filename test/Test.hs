@@ -2,6 +2,7 @@ module Main(main) where
 {
     import Data.Maybe;
     import System.Environment;
+    import System.Directory;
     import Test.Tasty;
     import Test.Tasty.HUnit;
     import Test.Tasty.Golden;
@@ -140,19 +141,20 @@ module Main(main) where
     main :: IO ();
     main = do
     {
+        ls_exists <- doesFileExist "/usr/share/zoneinfo/leap-seconds.list"; -- workaround for Travis, which doesn't have this file
         zones <- getZoneDescriptions;
         let
         {
             names = fmap zoneName zones;
         };
-        defaultMain $ testGroup "timezone-unix"
+        defaultMain $ testGroup "timezone-unix" $
         [
             testCountryCodes,
             testZoneDescriptions zones,
             testLoadZones names,
             testUnknownZoneName,
-            testGetLeapSecondList,
             testLeapSecondTransition
-        ];
+        ] ++
+        if ls_exists then [testGetLeapSecondList] else [];
     };
 }

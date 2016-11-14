@@ -36,6 +36,7 @@ test-suite test
     build-depends:
         base,
         time,
+        directory,
         timezone-series,
         tasty,
         tasty-hunit,
