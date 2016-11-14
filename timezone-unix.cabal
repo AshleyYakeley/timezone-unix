@@ -27,6 +27,7 @@ library
     exposed-modules:
         Data.Time.LocalTime.TimeZone.Unix
     other-modules:
+        Data.Time.Clock.LeapSecond
     ghc-options: -Wall -Werror
 
 test-suite test

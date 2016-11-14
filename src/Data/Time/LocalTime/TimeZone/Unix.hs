@@ -16,6 +16,9 @@ module Data.Time.LocalTime.TimeZone.Unix
     -- * Leap Seconds
     LeapSecondList(..),
     getLeapSecondList,
+    leapSecondListToMap,
+    -- * time
+    module Data.Time.Clock.LeapSecond,
 ) where
 {
     import Data.Char;
@@ -25,10 +28,10 @@ module Data.Time.LocalTime.TimeZone.Unix
     import System.Environment;
     import System.Directory;
     import System.FilePath.Posix;
-    import Data.Time.Clock.POSIX;
-    import Data.Time.LocalTime;
+    import Data.Time;
     import Data.Time.LocalTime.TimeZone.Series;
     import Data.Time.LocalTime.TimeZone.Olson;
+    import Data.Time.Clock.LeapSecond;
 
 
     separate :: Char -> String -> [String];
@@ -192,19 +195,21 @@ module Data.Time.LocalTime.TimeZone.Unix
 
     data LeapSecondList = MkLeapSecondList
     {
-        lslVersion :: POSIXTime,
-        lslExpiration :: POSIXTime,
-        lslTransitions :: [(POSIXTime,Int)]
+        lslVersion :: Day,
+        lslExpiration :: Day,
+        lslTransitions :: [(Day,Int)]
     };
 
-    ntpEpoch :: POSIXTime;
-    ntpEpoch = -25567 * 24 * 60 * 60;
+    -- | 1900-01-01
+    ;
+    ntpEpochDay :: Day;
+    ntpEpochDay = ModifiedJulianDay 15020;
 
-    ntpDateStringToPOSIX :: String -> Maybe POSIXTime;
-    ntpDateStringToPOSIX s = do
+    ntpDateStringToDay :: String -> Maybe Day;
+    ntpDateStringToDay s = do
     {
         n <- readMaybe s;
-        return $ ntpEpoch + fromInteger n;
+        return $ addDays (div n 86400) ntpEpochDay;
     };
 
     -- | Get the leap-second list found in @leap-seconds.list@.
@@ -219,13 +224,13 @@ module Data.Time.LocalTime.TimeZone.Unix
         text <- readFile filepath;
         let
         {
-            readLine ('#':'$':s) | Just version <- ntpDateStringToPOSIX s = return (Just version,Nothing,Nothing);
-            readLine ('#':'@':s) | Just expiration <- ntpDateStringToPOSIX s = return (Nothing,Just expiration,Nothing);
+            readLine ('#':'$':s) | Just version <- ntpDateStringToDay s = return (Just version,Nothing,Nothing);
+            readLine ('#':'@':s) | Just expiration <- ntpDateStringToDay s = return (Nothing,Just expiration,Nothing);
             readLine ('#':_) = return (Nothing,Nothing,Nothing);
             readLine "" = return (Nothing,Nothing,Nothing);
             readLine s = case separate '\t' s of
             {
-                (tstr:ostr:_) | Just t <- ntpDateStringToPOSIX tstr, Just offset <- readMaybe ostr -> return $ (Nothing,Nothing,Just (t,offset));
+                (tstr:ostr:_) | Just t <- ntpDateStringToDay tstr, Just offset <- readMaybe ostr -> return $ (Nothing,Nothing,Just (t,offset));
                 _ -> fail $ "unexpected line in "++filepath++": " ++ s;
             };
         };
@@ -249,11 +254,13 @@ module Data.Time.LocalTime.TimeZone.Unix
         return $ MkLeapSecondList version expiration transitions;
     };
 
-{-
-    utcDayLength :: LeapSecondList -> Day -> Maybe DiffTime;
-
-    utcToTAITime :: LeapSecondList -> UTCTime -> Maybe AbsoluteTime;
-
-    taiToUTCTime :: LeapSecondList -> AbsoluteTime -> Maybe UTCTime;
--}
+    leapSecondListToMap :: LeapSecondList -> LeapSecondMap Maybe;
+    leapSecondListToMap lsl day | day >= lslExpiration lsl = Nothing;
+    leapSecondListToMap lsl day = let
+    {
+        findInList :: [(Day,Int)] -> Maybe Int -> Maybe Int;
+        findInList [] mi = mi;
+        findInList ((d,_):_) mi | day < d = mi;
+        findInList ((_,i):rest) _ = findInList rest (Just i);
+    } in findInList (lslTransitions lsl) Nothing;
 }
