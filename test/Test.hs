@@ -1,6 +1,8 @@
 module Main(main) where
 {
     import Data.Maybe;
+    import Data.Foldable;
+    import Control.Exception;
     import System.Environment;
     import System.Directory;
     import Test.Tasty;
@@ -23,6 +25,16 @@ module Main(main) where
     testZoneDescriptions zones = testCase "getZoneDescriptions" $ do
     {
         assertBool "at least 300 zones" $ length zones >= 300;
+        forM_ zones $ \MkZoneDescription{..} -> do
+        {
+            assertBool "zoneCountries length" $ length zoneCountries >= 1;
+            forM_ zoneCountries $ \zc -> assertEqual "zoneCountries member length" 2 $ length zc;
+            _ <- evaluate (fst zoneLocation);
+            _ <- evaluate (snd zoneLocation);
+            _ <- evaluate zoneName;
+            _ <- evaluate zoneComment;
+            return ();
+        }
     };
 
     testGetTimeZoneSeries :: Maybe ZoneName -> TestTree;

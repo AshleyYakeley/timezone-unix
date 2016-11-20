@@ -107,15 +107,70 @@ module Data.Time.LocalTime.TimeZone.Unix
     {
         -- | The countries that overlap the zone.
         zoneCountries :: [CountryCode],
-        -- | Latitude and longitude of the zone's principal location
-        -- in ISO 6709 sign-degrees-minutes-seconds format,
-        -- either +-DDMM+-DDDMM or +-DDMMSS+-DDDMMSS,
-        -- first latitude (+ is north), then longitude (+ is east).
-        zoneLocation :: String,
+        -- | (Latitude, longitude) of principal location in degrees, + is north, east.
+        zoneLocation :: (Rational,Rational),
         -- | Zone name.
         zoneName :: ZoneName,
         -- | Comments; present if and only if a country has multiple zones.
         zoneComment :: String
+    };
+
+    getSign :: Char -> Maybe Rational;
+    getSign '+' = Just 1;
+    getSign '-' = Just (-1);
+    getSign _ = Nothing;
+
+    getDigit :: Char -> Maybe Rational;
+    getDigit c | c < '0' = Nothing;
+    getDigit c | c > '9' = Nothing;
+    getDigit c = Just $ toRational $ (fromEnum c) - (fromEnum '0');
+
+    getDigit2 :: Char -> Char -> Maybe Rational;
+    getDigit2 c1 c2 = do
+    {
+        r1 <- getDigit c1;
+        r2 <- getDigit c2;
+        return $ r1 * 10 + r2;
+    };
+
+    getDigit3 :: Char -> Char -> Char -> Maybe Rational;
+    getDigit3 c1 c2 c3 = do
+    {
+        r1 <- getDigit2 c1 c2;
+        r2 <- getDigit c3;
+        return $ r1 * 10 + r2;
+    };
+
+    parseISO6709 :: String -> Maybe (Rational,Rational);
+    parseISO6709 [xsn,xd1,xd2,xm1,xm2,ysn,yd1,yd2,yd3,ym1,ym2] = do
+    {
+        xsgn <- getSign xsn;
+        xdeg <- getDigit2 xd1 xd2;
+        xmin <- getDigit2 xm1 xm2;
+        ysgn <- getSign ysn;
+        ydeg <- getDigit3 yd1 yd2 yd3;
+        ymin <- getDigit2 ym1 ym2;
+        return (xsgn * (xdeg + xmin / 60),ysgn * (ydeg + ymin / 60));
+    };
+    parseISO6709 [xsn,xd1,xd2,xm1,xm2,xs1,xs2,ysn,yd1,yd2,yd3,ym1,ym2,ys1,ys2] = do
+    {
+        xsgn <- getSign xsn;
+        xdeg <- getDigit2 xd1 xd2;
+        xmin <- getDigit2 xm1 xm2;
+        xsec <- getDigit2 xs1 xs2;
+        ysgn <- getSign ysn;
+        ydeg <- getDigit3 yd1 yd2 yd3;
+        ymin <- getDigit2 ym1 ym2;
+        ysec <- getDigit2 ys1 ys2;
+        return (xsgn * (xdeg + xmin / 60 + xsec / 3600),ysgn * (ydeg + ymin / 60 + ysec / 3600));
+    };
+    parseISO6709 _ = Nothing;
+
+    getISO6709 :: String -> (Rational,Rational);
+    getISO6709 location = case parseISO6709 location of
+    {
+        Just loc -> loc;
+        Nothing -> error $ "bad IS06709: " ++ location;
     };
 
     -- | Get the zone descriptions found in @zone1970.tab@ (or @zone.tab@).
@@ -126,14 +181,14 @@ module Data.Time.LocalTime.TimeZone.Unix
         toZoneDescription [countries,location,name] = Just $ MkZoneDescription
         {
             zoneCountries = separate ',' countries,
-            zoneLocation = location,
+            zoneLocation = getISO6709 location,
             zoneName = name,
             zoneComment = ""
         };
         toZoneDescription [countries,location,name,comment] = Just $ MkZoneDescription
         {
             zoneCountries = separate ',' countries,
-            zoneLocation = location,
+            zoneLocation = getISO6709 location,
             zoneName = name,
             zoneComment = comment
         };
