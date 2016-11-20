@@ -1,3 +1,4 @@
+-- | UNIX-specific handling of time data.
 module Data.Time.LocalTime.TimeZone.Unix
 (
     -- * Time Zone
@@ -81,6 +82,8 @@ module Data.Time.LocalTime.TimeZone.Unix
         return $ catMaybes mstrs;
     };
 
+    -- | ISO 3166 alpha-2 country code (i.e., two capital letters).
+    ;
     type CountryCode = String;
 
     -- | Get the country codes and names found in @iso3166.tab@.
@@ -94,13 +97,24 @@ module Data.Time.LocalTime.TimeZone.Unix
     } in readZoneInfoFile toCountryCode ["iso3166.tab"];
 
 
+    -- | Name of a zone, e.g. \"America/Los_Angeles\".
+    ;
     type ZoneName = String;
 
+    -- | Information about a zone.
+    ;
     data ZoneDescription = MkZoneDescription
     {
+        -- | The countries that overlap the zone.
         zoneCountries :: [CountryCode],
+        -- | Latitude and longitude of the zone's principal location
+        -- in ISO 6709 sign-degrees-minutes-seconds format,
+        -- either +-DDMM+-DDDMM or +-DDMMSS+-DDDMMSS,
+        -- first latitude (+ is north), then longitude (+ is east).
         zoneLocation :: String,
+        -- | Zone name.
         zoneName :: ZoneName,
+        -- | Comments; present if and only if a country has multiple zones.
         zoneComment :: String
     };
 

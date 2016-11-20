@@ -1,6 +1,8 @@
 cabal-version: >=1.10
 name: timezone-unix
-version: 0.1
+version: 1.0
+category: Time
+description: UNIX-specific handling of time data.
 author: Ashley Yakeley
 license: BSD3
 license-file: LICENSE
@@ -27,7 +29,7 @@ library
         timezone-olson
     exposed-modules:
         Data.Time.LocalTime.TimeZone.Unix
-    ghc-options: -Wall -Werror
+    ghc-options: -Wall
 
 test-suite test
     type: exitcode-stdio-1.0
@@ -44,6 +46,6 @@ test-suite test
         timezone-unix
     default-language: Haskell2010
     default-extensions:
-    ghc-options: -Wall -Werror
+    ghc-options: -Wall
     main-is: Test.hs
     other-modules:
