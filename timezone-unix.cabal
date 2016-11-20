@@ -18,16 +18,15 @@ library
     default-extensions:
     build-depends:
         base,
-        time,
+        time >= 1.7,
         unix,
         filepath,
         directory,
+        leapseconds,
         timezone-series,
         timezone-olson
     exposed-modules:
         Data.Time.LocalTime.TimeZone.Unix
-    other-modules:
-        Data.Time.Clock.LeapSecond
     ghc-options: -Wall -Werror
 
 test-suite test
@@ -35,8 +34,9 @@ test-suite test
     hs-source-dirs: test
     build-depends:
         base,
-        time,
+        time >= 1.7,
         directory,
+        leapseconds,
         timezone-series,
         tasty,
         tasty-hunit,

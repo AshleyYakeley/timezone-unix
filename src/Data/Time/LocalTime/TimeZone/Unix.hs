@@ -14,24 +14,19 @@ module Data.Time.LocalTime.TimeZone.Unix
     getCurrentOlsonData,
     getOlsonDataForZone,
     -- * Leap Seconds
-    LeapSecondList(..),
     getLeapSecondList,
-    leapSecondListToMap,
-    -- * time
-    module Data.Time.Clock.LeapSecond,
 ) where
 {
     import Data.Char;
     import Data.Maybe;
     import Data.List;
-    import Text.Read;
     import System.Environment;
     import System.Directory;
     import System.FilePath.Posix;
     import Data.Time;
     import Data.Time.LocalTime.TimeZone.Series;
     import Data.Time.LocalTime.TimeZone.Olson;
-    import Data.Time.Clock.LeapSecond;
+    import Data.Time.Clock.LeapSeconds;
 
 
     separate :: Char -> String -> [String];
@@ -154,6 +149,9 @@ module Data.Time.LocalTime.TimeZone.Unix
     defaultTimeZoneSeries :: TimeZoneSeries;
     defaultTimeZoneSeries = TimeZoneSeries utc [];
 
+    interpretOldTZ :: String -> Maybe TimeZoneSeries;
+    interpretOldTZ _ = Nothing; -- TODO: interpret old-style TZ format
+
     -- | Get the 'TimeZoneSeries' for this 'ZoneName' (or for the system default), defaulting to UTC if the name is not found.
     ;
     getTimeZoneSeriesForZone :: Maybe ZoneName -> IO TimeZoneSeries;
@@ -164,7 +162,11 @@ module Data.Time.LocalTime.TimeZone.Unix
             exists <- doesFileExist path;
             if exists then getTimeZoneSeriesFromOlsonFile path else return defaultTimeZoneSeries;
         };
-        Nothing -> return defaultTimeZoneSeries; -- TODO: interpret old-style TZ format
+        Nothing -> return $ fromMaybe defaultTimeZoneSeries $ do
+        {
+            name <- mname;
+            interpretOldTZ name;
+        };
     };
 
     -- | Get the current 'TimeZoneSeries' (as specifed by @TZ@ env-var or else the system default).
@@ -194,25 +196,6 @@ module Data.Time.LocalTime.TimeZone.Unix
         getOlsonDataForZone mtzvar;
     };
 
-    data LeapSecondList = MkLeapSecondList
-    {
-        lslVersion :: Day,
-        lslExpiration :: Day,
-        lslTransitions :: [(Day,Int)]
-    };
-
-    -- | 1900-01-01
-    ;
-    ntpEpochDay :: Day;
-    ntpEpochDay = ModifiedJulianDay 15020;
-
-    ntpDateStringToDay :: String -> Maybe Day;
-    ntpDateStringToDay s = do
-    {
-        n <- readMaybe s;
-        return $ addDays (div n 86400) ntpEpochDay;
-    };
-
     -- | Get the leap-second list found in @leap-seconds.list@.
     -- Note that earlier versions of zoneinfo don't include this file, in which case this will throw exception matching 'isDoesNotExistError'.
     ;
@@ -224,45 +207,10 @@ module Data.Time.LocalTime.TimeZone.Unix
             filepath = zoneFilePath "leap-seconds.list";
         };
         text <- readFile filepath;
-        let
+        case parseNISTLeapSecondList text of
         {
-            readLine ('#':'$':s) | Just version <- ntpDateStringToDay s = return (Just version,Nothing,Nothing);
-            readLine ('#':'@':s) | Just expiration <- ntpDateStringToDay s = return (Nothing,Just expiration,Nothing);
-            readLine ('#':_) = return (Nothing,Nothing,Nothing);
-            readLine "" = return (Nothing,Nothing,Nothing);
-            readLine s = case separate '\t' s of
-            {
-                (tstr:ostr:_) | Just t <- ntpDateStringToDay tstr, Just offset <- readMaybe ostr -> return $ (Nothing,Nothing,Just (t,offset));
-                _ -> fail $ "unexpected line in "++filepath++": " ++ s;
-            };
+            Just lsl -> return lsl;
+            Nothing -> fail $ "failed to parse " ++ filepath;
         };
-        mstrs <- traverse readLine $ lines text;
-        version <- case catMaybes $ fmap (\(x,_,_) -> x) mstrs of
-        {
-            [x] -> return x;
-            [] -> fail $ "missing #$ line in " ++ filepath;
-            _ -> fail $ "duplicate #$ lines in " ++ filepath;
-        };
-        expiration <- case catMaybes $ fmap (\(_,x,_) -> x) mstrs of
-        {
-            [x] -> return x;
-            [] -> fail $ "missing #$ line in " ++ filepath;
-            _ -> fail $ "duplicate #$ lines in " ++ filepath;
-        };
-        let
-        {
-            transitions = catMaybes $ fmap (\(_,_,x) -> x) mstrs;
-        };
-        return $ MkLeapSecondList version expiration transitions;
     };
-
-    leapSecondListToMap :: LeapSecondList -> LeapSecondMap Maybe;
-    leapSecondListToMap lsl day | day >= lslExpiration lsl = Nothing;
-    leapSecondListToMap lsl day = let
-    {
-        findInList :: [(Day,Int)] -> Maybe Int -> Maybe Int;
-        findInList [] mi = mi;
-        findInList ((d,_):_) mi | day < d = mi;
-        findInList ((_,i):rest) _ = findInList rest (Just i);
-    } in findInList (lslTransitions lsl) Nothing;
 }
