@@ -25,25 +25,26 @@ module Main(main) where
     testZoneDescriptions zones = testCase "getZoneDescriptions" $ do
     {
         assertBool "at least 300 zones" $ length zones >= 300;
-        forM_ zones $ \MkZoneDescription{..} -> do
+        forM_ zones $ \MkZoneDescription{zoneLocation=(lat,long,acc),..} -> do
         {
             assertBool "zoneCountries length" $ length zoneCountries >= 1;
             forM_ zoneCountries $ \zc -> assertEqual "zoneCountries member length" 2 $ length zc;
-            _ <- evaluate (fst zoneLocation);
-            _ <- evaluate (snd zoneLocation);
+            _ <- evaluate lat;
+            _ <- evaluate long;
+            _ <- evaluate acc;
             _ <- evaluate zoneName;
             _ <- evaluate zoneComment;
             return ();
         }
     };
 
-    testGetTimeZoneSeries :: Maybe ZoneName -> TestTree;
+    testGetTimeZoneSeries :: Maybe TimeZoneSpec -> TestTree;
     testGetTimeZoneSeries mname = testCase "getTimeZoneSeriesForZone" $ getTimeZoneSeriesForZone mname >> return ();
 
-    testGetOlsonData :: Maybe ZoneName -> TestTree;
+    testGetOlsonData :: Maybe TimeZoneSpec -> TestTree;
     testGetOlsonData mname = testCase "getOlsonDataForZone" $ getOlsonDataForZone mname >> return ();
 
-    testLoadZones :: [ZoneName] -> TestTree;
+    testLoadZones :: [TimeZoneSpec] -> TestTree;
     testLoadZones names = testGroup "load" $ fmap (\mname -> testGroup (fromMaybe "default" mname)
         [
             testGetTimeZoneSeries mname,
@@ -51,11 +52,11 @@ module Main(main) where
         ]) (Nothing : (fmap Just names));
 
     testUnknownZoneName :: TestTree;
-    testUnknownZoneName = testCase "unknown ZoneName" $ do
+    testUnknownZoneName = testCase "unknown TimeZoneSpec" $ do
     {
         setEnv "TZ" "unknown";
         tzs <- getCurrentTimeZoneSeries;
-        assertEqual "default ZoneName" (TimeZoneSeries utc []) tzs;
+        assertEqual "default TimeZoneSpec" (TimeZoneSeries utc []) tzs;
     };
 
     testGetLeapSecondList :: TestTree;

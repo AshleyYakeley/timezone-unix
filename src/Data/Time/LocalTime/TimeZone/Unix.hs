@@ -8,7 +8,7 @@ module Data.Time.LocalTime.TimeZone.Unix
     CountryCode,
     getCountryCodes,
     -- * Zone Information
-    ZoneName,
+    TimeZoneSpec,
     ZoneDescription(..),
     getZoneDescriptions,
     -- * OlsonData
@@ -18,7 +18,6 @@ module Data.Time.LocalTime.TimeZone.Unix
     getLeapSecondList,
 ) where
 {
-    import Data.Char;
     import Data.Maybe;
     import Data.List;
     import System.Environment;
@@ -52,7 +51,7 @@ module Data.Time.LocalTime.TimeZone.Unix
     -- http://www.pathname.com/fhs/pub/fhs-2.3.html#SPECIFICOPTIONS15
     -- http://askubuntu.com/questions/118015/where-is-usr-share-zoneinfo-specified
     zoneFilePath :: String -> FilePath;
-    zoneFilePath filename = "/usr/share/zoneinfo/" ++ filename;
+    zoneFilePath filename = "/usr/share/zoneinfo" </> filename;
 
     readZoneInfoFile :: ([String] -> Maybe a) -> [String] -> IO [a];
     readZoneInfoFile toValues filenames = do
@@ -97,9 +96,9 @@ module Data.Time.LocalTime.TimeZone.Unix
     } in readZoneInfoFile toCountryCode ["iso3166.tab"];
 
 
-    -- | Name of a zone, e.g. \"America/Los_Angeles\".
+    -- | Time-zone specification as used in the TZ environment variable, e.g. \"America/Los_Angeles\".
     ;
-    type ZoneName = String;
+    type TimeZoneSpec = String;
 
     -- | Information about a zone.
     ;
@@ -107,10 +106,11 @@ module Data.Time.LocalTime.TimeZone.Unix
     {
         -- | The countries that overlap the zone.
         zoneCountries :: [CountryCode],
-        -- | (Latitude, longitude) of principal location in degrees, + is north, east.
-        zoneLocation :: (Rational,Rational),
+        -- | (Latitude, longitude, accuracy) of principal location in degrees, + is north, east.
+        -- Accuracy indicates that the location is specified to arcseconds rather than arcminutes.
+        zoneLocation :: (Rational,Rational,Bool),
         -- | Zone name.
-        zoneName :: ZoneName,
+        zoneName :: TimeZoneSpec,
         -- | Comments; present if and only if a country has multiple zones.
         zoneComment :: String
     };
@@ -141,7 +141,7 @@ module Data.Time.LocalTime.TimeZone.Unix
         return $ r1 * 10 + r2;
     };
 
-    parseISO6709 :: String -> Maybe (Rational,Rational);
+    parseISO6709 :: String -> Maybe (Rational,Rational,Bool);
     parseISO6709 [xsn,xd1,xd2,xm1,xm2,ysn,yd1,yd2,yd3,ym1,ym2] = do
     {
         xsgn <- getSign xsn;
@@ -150,7 +150,7 @@ module Data.Time.LocalTime.TimeZone.Unix
         ysgn <- getSign ysn;
         ydeg <- getDigit3 yd1 yd2 yd3;
         ymin <- getDigit2 ym1 ym2;
-        return (xsgn * (xdeg + xmin / 60),ysgn * (ydeg + ymin / 60));
+        return (xsgn * (xdeg + xmin / 60),ysgn * (ydeg + ymin / 60),False);
     };
     parseISO6709 [xsn,xd1,xd2,xm1,xm2,xs1,xs2,ysn,yd1,yd2,yd3,ym1,ym2,ys1,ys2] = do
     {
@@ -162,11 +162,11 @@ module Data.Time.LocalTime.TimeZone.Unix
         ydeg <- getDigit3 yd1 yd2 yd3;
         ymin <- getDigit2 ym1 ym2;
         ysec <- getDigit2 ys1 ys2;
-        return (xsgn * (xdeg + xmin / 60 + xsec / 3600),ysgn * (ydeg + ymin / 60 + ysec / 3600));
+        return (xsgn * (xdeg + xmin / 60 + xsec / 3600),ysgn * (ydeg + ymin / 60 + ysec / 3600),True);
     };
     parseISO6709 _ = Nothing;
 
-    getISO6709 :: String -> (Rational,Rational);
+    getISO6709 :: String -> (Rational,Rational,Bool);
     getISO6709 location = case parseISO6709 location of
     {
         Just loc -> loc;
@@ -195,46 +195,35 @@ module Data.Time.LocalTime.TimeZone.Unix
         toZoneDescription _ = Nothing;
     } in readZoneInfoFile toZoneDescription ["zone1970.tab","zone.tab"];
 
-    validZoneNamePath :: Maybe ZoneName -> Maybe FilePath;
-    validZoneNamePath Nothing = Just "/etc/localtime";
-    validZoneNamePath (Just name) = let
+    existingZoneNamePath :: String -> IO (Maybe FilePath);
+    existingZoneNamePath name = do
     {
-        components = splitDirectories name;
+        let
+        {
+            path = zoneFilePath name;
+        };
+        exists <- doesFileExist path;
+        return $ if exists then Just path else Nothing;
+    };
 
-        goodComponent "" = False;
-        goodComponent "/" = False;
-        goodComponent "." = False;
-        goodComponent ".." = False;
-        goodComponent comp = all goodChar comp;
-
-        goodChar '.' = True;
-        goodChar '-' = True;
-        goodChar '_' = True;
-        goodChar c = isAscii c && isLetter c;
-
-        good = (length components >= 1) && all goodComponent components;
-    } in if good then Just (zoneFilePath name) else Nothing;
+    getZoneNamePath :: Maybe TimeZoneSpec -> IO (Maybe FilePath);
+    getZoneNamePath Nothing = return $ Just "/etc/localtime";
+    getZoneNamePath (Just (':':name)) = existingZoneNamePath name;
+    getZoneNamePath (Just name) = existingZoneNamePath name;
 
     defaultTimeZoneSeries :: TimeZoneSeries;
     defaultTimeZoneSeries = TimeZoneSeries utc [];
 
-    interpretOldTZ :: String -> Maybe TimeZoneSeries;
-    interpretOldTZ _ = Nothing; -- TODO: interpret old-style TZ format
-
-    -- | Get the 'TimeZoneSeries' for this 'ZoneName' (or for the system default), defaulting to UTC if the name is not found.
+    -- | Get the 'TimeZoneSeries' for this 'TimeZoneSpec' (or for the system default), defaulting to UTC if the name is not found.
     ;
-    getTimeZoneSeriesForZone :: Maybe ZoneName -> IO TimeZoneSeries;
-    getTimeZoneSeriesForZone mname = case validZoneNamePath mname of
+    getTimeZoneSeriesForZone :: Maybe TimeZoneSpec -> IO TimeZoneSeries;
+    getTimeZoneSeriesForZone mname = do
     {
-        Just path -> do
+        mpath <- getZoneNamePath mname;
+        case mpath of
         {
-            exists <- doesFileExist path;
-            if exists then getTimeZoneSeriesFromOlsonFile path else return defaultTimeZoneSeries;
-        };
-        Nothing -> return $ fromMaybe defaultTimeZoneSeries $ do
-        {
-            name <- mname;
-            interpretOldTZ name;
+            Just path -> getTimeZoneSeriesFromOlsonFile path;
+            Nothing -> return $ fromMaybe defaultTimeZoneSeries $ olsonToTimeZoneSeries $ mempty {olsonPosixTZ=mname};
         };
     };
 
@@ -247,13 +236,18 @@ module Data.Time.LocalTime.TimeZone.Unix
         getTimeZoneSeriesForZone mtzvar;
     };
 
-    -- | Read the 'OlsonData' file for this 'ZoneName' (or for the system default). The usual file exceptions may be thrown.
+    -- | Obtain an 'OlsonData' file for this 'TimeZoneSpec' (or for the system default).
+    -- If the file is not in the database, return an empty 'OlsonData' with the name in 'olsonPosixTZ'.
     ;
-    getOlsonDataForZone :: Maybe ZoneName -> IO OlsonData;
-    getOlsonDataForZone mname = case validZoneNamePath mname of
+    getOlsonDataForZone :: Maybe TimeZoneSpec -> IO OlsonData;
+    getOlsonDataForZone mname = do
     {
-        Just path -> getOlsonFromFile path;
-        Nothing -> fail $ "Not a valid ZoneInfo name: " ++ show mname;
+        mpath <- getZoneNamePath mname;
+        case mpath of
+        {
+            Just path -> getOlsonFromFile path;
+            Nothing -> return $ mempty {olsonPosixTZ=mname};
+        };
     };
 
     -- | Get the current 'OlsonData' (as specifed by @TZ@ env-var or else the system default).
